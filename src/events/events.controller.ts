@@ -3,58 +3,101 @@ import {
   Controller,
   Delete,
   Get,
-  HttpCode,
+  Logger,
+  NotFoundException,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
+  Query,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
-import { CreateEventDto } from './create-event.dto';
-import { Event } from './event.entity';
-import { UpdateEventDto } from './update-event.dto';
+import { CreateEventDto } from './input/create-event.dto';
+import { UpdateEventDto } from './input/update-event.dto';
+import { EventsService } from './events.service';
+import { ListEvents } from './input/list.events';
+import { JwtAuthGuard } from 'src/auth/jwtAuth.guard';
+import { CurrentUser } from 'src/auth/current-user.decorator';
+import { User } from 'src/auth/user.entity';
 
 @Controller('/events')
 export class EventsController {
-  private events: Event[] = [];
+  private readonly logger = new Logger(EventsController.name);
+  constructor(private readonly eventsService: EventsService) {}
 
   @Get()
-  findAll() {
-    return this.events;
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async findAll(@Query() filter: ListEvents) {
+    this.logger.log(filter);
+    const events =
+      await this.eventsService.getEventsWithAttendeeCountQueryFilteredPaginated(
+        filter,
+        { total: true, currentPage: filter.page, limit: 2 },
+      );
+    return events;
   }
 
+  // @Get('practice2')
+  // async practice2() {
+  //   // return await this.repository.findOne({
+  //   //   where: {
+  //   //     id: 1
+  //   //   },
+  //   //   relations: ['attendees']
+  //   // })
+  //   const event = await this.repository.findOne({
+  //     where: {
+  //       id: 1,
+  //     },
+  //     relations: ['attendees'],
+  //   });
+  //   const attendee = new Attendee();
+  //   attendee.name = 'Using cascade';
+  //   // attendee.event = event;
+  //   // event.attendees.push(attendee);
+  //   event.attendees = [];
+
+  //   await this.repository.save(event);
+
+  //   return event;
+  // }
+
   @Get(':id')
-  findOne(@Param('id') id) {
-    const event = this.events.find((event) => event.id === parseInt(id));
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    // console.log(typeof id);
+    const event = await this.eventsService.getEvent(id);
+
+    if (!event) {
+      throw new NotFoundException();
+    }
 
     return event;
   }
 
   @Post()
-  create(@Body() input: CreateEventDto) {
-    const event = {
-      ...input,
-      when: new Date(input.when),
-      id: this.events.length + 1,
-    };
-    this.events.push(event);
-    return event;
+  @UseGuards(JwtAuthGuard)
+  async create(@Body() input: CreateEventDto, @CurrentUser() user: User) {
+    return await this.eventsService.createEvent(input, user);
   }
 
   @Patch(':id')
-  update(@Param('id') id, @Body() input: UpdateEventDto) {
-    const index = this.events.findIndex((event) => event.id === parseInt(id));
-
-    this.events[index] = {
-      ...this.events[index],
-      ...input,
-      when: input.when ? new Date(input.when) : this.events[index].when,
-    };
-
-    return this.events[index];
+  @UseGuards(JwtAuthGuard)
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() input: UpdateEventDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.eventsService.updateEvent(id, input, user);
   }
 
   @Delete(':id')
-  @HttpCode(204)
-  remove(@Param('id') id) {
-    this.events = this.events.filter((event) => event.id !== parseInt(id));
+  @UseGuards(JwtAuthGuard)
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    return await this.eventsService.deleteEvent(id, user);
   }
 }

@@ -1,5 +1,13 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
-
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import { Attendee } from './attendee.entity';
+import { User } from 'src/auth/user.entity';
 @Entity()
 export class Event {
   @PrimaryGeneratedColumn()
@@ -16,4 +24,21 @@ export class Event {
 
   @Column()
   address: string;
+
+  @OneToMany(() => Attendee, (attendee) => attendee.event, {
+    cascade: true,
+  })
+  attendees: Attendee[];
+
+  @ManyToOne(() => User, (user) => user.organized)
+  @JoinColumn({ name: 'organizerId' })
+  organizer: User;
+
+  @Column({ nullable: true })
+  organizerId: number;
+
+  attendeeCount?: number;
+  attendeeAccepted?: number;
+  attendeeMaybe?: number;
+  attendeeRejected?: number;
 }
